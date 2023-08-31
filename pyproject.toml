@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "image_meta_cleaner"
+version = "0.1.0"
+description = "Utility for extracting location info and cleaning meta data of images."
+authors = ["butvinm <butvin.mihail@yandex.ru>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+
+[tool.poetry.group.dev.dependencies]
+wemake-python-styleguide = "^0.18.0"
+mypy = "^1.5.1"
+pytest = "^7.4.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
