@@ -18,8 +18,35 @@ class ProcessingResult(object):
     ok: bool
     image_path: Path
     location_info_path: Optional[Path]
+    file_hash: Optional[int]
     message: Optional[str]
     error: Optional[Exception]
+
+    @classmethod
+    def failure(
+        cls,
+        image_path: Path,
+        message: str,
+        error: Exception,
+    ) -> 'ProcessingResult':
+        """Create failure result.
+
+        Args:
+            image_path (Path): Path to the image.
+            message (str): Message.
+            error (Exception): Exception.
+
+        Returns:
+            ProcessingResult: Failure result.
+        """
+        return cls(
+            ok=False,
+            image_path=image_path,
+            location_info_path=None,
+            file_hash=None,
+            message=message,
+            error=error,
+        )
 
 
 def save_location_info(location: Location, image_path: Path) -> Path:
@@ -59,10 +86,8 @@ def process_image(file_path: Path, pure: bool = False) -> ProcessingResult:
     try:
         file_data = file_path.read_bytes()
     except OSError as read_error:
-        return ProcessingResult(
-            ok=False,
+        return ProcessingResult.failure(
             image_path=file_path,
-            location_info_path=None,
             message='Cannot read file',
             error=read_error,
         )
@@ -76,10 +101,8 @@ def process_image(file_path: Path, pure: bool = False) -> ProcessingResult:
     try:
         image_without_meta = get_image_without_meta(file_data)
     except Exception as get_meta_error:
-        return ProcessingResult(
-            ok=False,
+        return ProcessingResult.failure(
             image_path=file_path,
-            location_info_path=None,
             message='Cannot remove metadata',
             error=get_meta_error,
         )
@@ -87,10 +110,12 @@ def process_image(file_path: Path, pure: bool = False) -> ProcessingResult:
     if not pure:
         image_without_meta.save(file_path)
 
+    file_hash = hash(file_data)
     return ProcessingResult(
         ok=True,
         image_path=file_path,
         location_info_path=location_info_path,
+        file_hash=file_hash,
         message='Success',
         error=None,
     )
