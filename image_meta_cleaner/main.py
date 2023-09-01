@@ -7,46 +7,72 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from image_meta_cleaner.files_index import (
+    FilesIndex,
+    create_index_file,
+    hash_file_data,
+    parse_index_file,
+)
 from image_meta_cleaner.images import get_image_without_meta, is_image
 from image_meta_cleaner.location import Location, get_file_gps_location
 
 
 @dataclass
-class ProcessingResult(object):
-    """Result of image processing."""
+class Ok(object):
+    """Success result of image processing."""
 
-    ok: bool
     image_path: Path
     location_info_path: Optional[Path]
-    file_hash: Optional[int]
-    message: Optional[str]
-    error: Optional[Exception]
+    file_hash: str
+    updated: bool
 
-    @classmethod
-    def failure(
-        cls,
-        image_path: Path,
-        message: str,
-        error: Exception,
-    ) -> 'ProcessingResult':
-        """Create failure result.
 
-        Args:
-            image_path (Path): Path to the image.
-            message (str): Message.
-            error (Exception): Exception.
+@dataclass
+class Failure(object):
+    """Failure result of image processing."""
 
-        Returns:
-            ProcessingResult: Failure result.
-        """
-        return cls(
-            ok=False,
-            image_path=image_path,
-            location_info_path=None,
-            file_hash=None,
-            message=message,
-            error=error,
-        )
+    image_path: Path
+    message: str
+    error: Exception
+
+
+# Result of image processing.
+Result = Ok | Failure
+
+
+def get_files_index(source: Path) -> FilesIndex:
+    """Get processed files from index file.
+
+    Index file is located in the same directory as the source
+    with the name '.imc'.
+
+    Args:
+        source (Path): Path to the source directory.
+
+    Returns:
+        FilesIndex: Processed files index.
+    """
+    index_file_path = source / '.imc'
+    if not index_file_path.exists():
+        return {}
+
+    index_file_data = index_file_path.read_text()
+    return parse_index_file(index_file_data)
+
+
+def save_files_index(source: Path, index: FilesIndex) -> None:
+    """Save processed files to index file.
+
+    Index file is located in the same directory as the source
+    with the name '.imc'.
+
+    Args:
+        source (Path): Path to the source directory.
+        index (FilesIndex): Processed files index.
+    """
+    index_file_path = source / '.imc'
+    index_file_data = create_index_file(index)
+    index_file_path.write_text(index_file_data)
 
 
 def save_location_info(location: Location, image_path: Path) -> Path:
@@ -71,25 +97,39 @@ def save_location_info(location: Location, image_path: Path) -> Path:
     return location_file_path
 
 
-def process_image(file_path: Path, pure: bool = False) -> ProcessingResult:
+def process_image(
+    file_path: Path,
+    index: FilesIndex,
+    pure: bool = False,
+) -> Result:
     """Process image file.
 
     Remove metadata from image and save location info of the file.
 
     Args:
         file_path (Path): Path to the image.
+        index (FilesIndex): Processed files index.
         pure (bool): If True, files will not be saved.
 
     Returns:
-        ProcessingResult: Result of the processing.
+        Result: Processing result.
     """
     try:
         file_data = file_path.read_bytes()
     except OSError as read_error:
-        return ProcessingResult.failure(
+        return Failure(
             image_path=file_path,
             message='Cannot read file',
             error=read_error,
+        )
+
+    file_hash = hash_file_data(file_data)
+    if file_path in index and index[file_path] == file_hash:
+        return Ok(
+            image_path=file_path,
+            location_info_path=None,
+            file_hash=file_hash,
+            updated=False,
         )
 
     location = get_file_gps_location(file_data)
@@ -101,7 +141,7 @@ def process_image(file_path: Path, pure: bool = False) -> ProcessingResult:
     try:
         image_without_meta = get_image_without_meta(file_data)
     except Exception as get_meta_error:
-        return ProcessingResult.failure(
+        return Failure(
             image_path=file_path,
             message='Cannot remove metadata',
             error=get_meta_error,
@@ -110,18 +150,15 @@ def process_image(file_path: Path, pure: bool = False) -> ProcessingResult:
     if not pure:
         image_without_meta.save(file_path)
 
-    file_hash = hash(file_data)
-    return ProcessingResult(
-        ok=True,
+    return Ok(
         image_path=file_path,
         location_info_path=location_info_path,
         file_hash=file_hash,
-        message='Success',
-        error=None,
+        updated=True,
     )
 
 
-def process_dir(source: Path, pure: bool = False) -> list[ProcessingResult]:
+def process_dir(source: Path, pure: bool = False) -> list[Result]:
     """Process images in directory.
 
     Remove metadata from images and save location info of all
@@ -134,13 +171,23 @@ def process_dir(source: Path, pure: bool = False) -> list[ProcessingResult]:
     Returns:
         list[ProcessingResult]: List of processing results.
     """
-    processing_results: list[ProcessingResult] = []
+    index = get_files_index(source)
+    processing_results: list[Result] = []
     for file_path in source.glob('**/*'):
+        file_path = file_path.absolute()
         if file_path.is_dir() or not is_image(file_path):
             continue
 
-        process_result = process_image(file_path, pure)
-        processing_results.append(process_result)
+        image_result = process_image(file_path, index, pure)
+        match image_result:
+            case Ok(image_path, _, file_hash, True):
+                processing_results.append(image_result)
+                index[image_path.absolute()] = file_hash
+            case Failure(image_path, _, _):
+                processing_results.append(image_result)
+
+    if not pure:
+        save_files_index(source, index)
 
     return processing_results
 
@@ -155,13 +202,14 @@ if __name__ == '__main__':
     source = Path(args[0])
 
     processing_results = process_dir(source)
-    success_results: list[ProcessingResult] = []
-    failure_results: list[ProcessingResult] = []
+    success_results: list[Ok] = []
+    failure_results: list[Failure] = []
     for processing_result in processing_results:
-        if processing_result.ok:
-            success_results.append(processing_result)
-        else:
-            failure_results.append(processing_result)
+        match processing_result:
+            case Ok():
+                success_results.append(processing_result)
+            case Failure():
+                failure_results.append(processing_result)
 
     print('Files: {files} Success: {success} Failure: {failure}'.format(
         files=len(processing_results),
