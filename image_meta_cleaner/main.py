@@ -6,11 +6,7 @@ import sys
 from pathlib import Path
 from time import sleep
 
-from image_meta_cleaner.files_index import (
-    FilesIndex,
-    create_index_file,
-    parse_index_file,
-)
+from image_meta_cleaner.files_index import FilesIndex
 from image_meta_cleaner.images import is_image
 from image_meta_cleaner.location import Location
 from image_meta_cleaner.processing import (
@@ -35,10 +31,10 @@ def get_files_index(source: Path) -> FilesIndex:
     """
     index_file_path = source / '.imc'
     if not index_file_path.exists():
-        return {}
+        return FilesIndex()
 
     index_file_data = index_file_path.read_text()
-    return parse_index_file(index_file_data)
+    return FilesIndex.from_index_file(index_file_data)
 
 
 def save_files_index(source: Path, index: FilesIndex) -> None:
@@ -52,7 +48,7 @@ def save_files_index(source: Path, index: FilesIndex) -> None:
         index (FilesIndex): Processed files index.
     """
     index_file_path = source / '.imc'
-    index_file_data = create_index_file(index)
+    index_file_data = index.build_index_file()
     index_file_path.write_text(index_file_data)
 
 

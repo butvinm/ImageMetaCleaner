@@ -9,11 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from image_meta_cleaner.files_index import (
-    FilesIndex,
-    hash_file_data,
-    verify_file,
-)
+from image_meta_cleaner.files_index import FilesIndex, hash_file_data
 from image_meta_cleaner.images import get_image_without_meta
 from image_meta_cleaner.location import Location, get_file_gps_location
 
@@ -91,14 +87,16 @@ def process_images(
         FilesIndex: Update files index.
     """
     processing_results: list[ProcessingResult] = []
-    new_index: FilesIndex = index.copy()
+    new_index = FilesIndex()
     for file_path, file_data in images:
-        if verify_file(index, file_path, file_data):
-            continue
-
-        file_result = process_image(file_path, file_data)
-        processing_results.append(file_result)
-        if isinstance(file_result, Ok):
-            new_index[file_path.absolute()] = file_result.file_hash
+        if index.verify_file(file_path, file_data):
+            file_hash = index.get(file_path)
+            if file_hash is not None:
+                new_index[file_path] = file_hash
+        else:
+            file_result = process_image(file_path, file_data)
+            processing_results.append(file_result)
+            if isinstance(file_result, Ok):
+                new_index[file_path] = file_result.file_hash
 
     return processing_results, new_index
