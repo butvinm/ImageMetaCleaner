@@ -59,4 +59,18 @@ def hash_file_data(file_data: bytes) -> str:
     Returns:
         str: File data hash.
     """
-    return hashlib.sha256(file_data).hexdigest()
+    return hashlib.sha256(file_data, usedforsecurity=False).hexdigest()
+
+
+def verify_file(index: FilesIndex, file_path: Path, file_data: bytes) -> bool:
+    """Verify that index contains actual file data.
+
+    Args:
+        index (FilesIndex): Files index.
+        file_path (Path): File path.
+        file_data (bytes): File content.
+
+    Returns:
+        bool: True if file in index and hash is same.
+    """
+    return index.get(file_path.absolute()) == hash_file_data(file_data)

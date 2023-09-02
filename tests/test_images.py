@@ -1,6 +1,9 @@
 """Tests for images module."""
 
+from io import BytesIO
 from pathlib import Path
+
+from PIL.Image import open as open_image
 
 from image_meta_cleaner.images import get_image_without_meta, is_image
 
@@ -26,6 +29,7 @@ def test_get_image_without_meta(assets_dir: Path) -> None:
     """
     image_path = assets_dir / '1.jpg'
     image_data = image_path.read_bytes()
-    image = get_image_without_meta(image_data)
-    assert not image.info
+    no_meta_image_data = get_image_without_meta(image_data)
+
+    image = open_image(BytesIO(no_meta_image_data))
     assert not len(image.getexif())
