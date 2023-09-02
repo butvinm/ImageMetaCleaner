@@ -2,6 +2,7 @@
 
 
 import json
+import logging
 import sys
 from pathlib import Path
 from time import sleep
@@ -14,6 +15,12 @@ from image_meta_cleaner.processing import (
     Ok,
     ProcessingResult,
     process_images,
+)
+
+logging.basicConfig(
+    format='%(asctime)s %(levelname)s %(message)s',  # noqa:WPS323
+    level=logging.INFO,
+    filename='imc.log',
 )
 
 
@@ -94,7 +101,7 @@ def get_dir_images(source: Path) -> list[tuple[Path, bytes]]:
     return images
 
 
-def print_result(results: list[ProcessingResult]) -> None:
+def log_result(results: list[ProcessingResult]) -> None:
     """Print processing result info.
 
     Args:
@@ -108,13 +115,13 @@ def print_result(results: list[ProcessingResult]) -> None:
         else:
             failure_results.append(result)
 
-    print('Processed: {total}\tSuccess: {success}\tFailure: {failure}'.format(
+    logging.info('Processed: {total}\tSuccess: {success}\tFailure: {failure}'.format(  # noqa: E501
         total=len(results),
         success=len(success_results),
         failure=len(failure_results),
     ))
     for failure in failure_results:
-        print('Fail to process {file_path}: {message}'.format(
+        logging.warning('Fail to process {file_path}: {message}'.format(
             file_path=failure.file_path,
             message=failure.message,
         ))
@@ -139,7 +146,7 @@ def process_dir(source: Path) -> None:
             result.file_path.write_bytes(result.file_data)
 
     save_files_index(source, new_index)
-    print_result(processing_results)
+    log_result(processing_results)
 
 
 def watch(source: Path, delay: int) -> None:
@@ -161,5 +168,5 @@ if __name__ == '__main__':
         case _, source, delay if delay.isdecimal():
             watch(Path(source), int(delay))
         case _:
-            print('Usage: imc source [delay]')
+            logging.error('Usage: imc source [delay]')
             sys.exit(1)
