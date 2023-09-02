@@ -162,4 +162,4 @@ if __name__ == '__main__':
             watch(Path(source), int(delay))
         case _:
             print('Usage: imc source [delay]')
-            exit(1)
+            sys.exit(1)
