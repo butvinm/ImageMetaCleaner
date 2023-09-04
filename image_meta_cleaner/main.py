@@ -1,15 +1,14 @@
 """Entry point of the script."""
 
 
-import json
 import logging
 import sys
 from pathlib import Path
 from time import sleep
+from typing import Optional
 
 from image_meta_cleaner.files_index import FilesIndex
 from image_meta_cleaner.images import is_image
-from image_meta_cleaner.location import Location
 from image_meta_cleaner.processing import (
     Err,
     Ok,
@@ -59,26 +58,56 @@ def save_files_index(source: Path, index: FilesIndex) -> None:
     index_file_path.write_text(index_file_data)
 
 
-def save_location(image_path: Path, location: Location) -> Path:
-    """Save location info of the image.
+def get_image_location_info(result: ProcessingResult) -> str:
+    """Build string with image location info.
 
-    Location will be saved in the same directory as the image
-    with the same name and extension '.json'.
+    String format: `file_path latitude longitude`
 
     Args:
-        location (Location): Location data.
-        image_path (Path): Path to the image.
+        result (ProcessingResult): \
+            Result of image processing with pathes and location info.
+
+    Returns:
+        str: String with image location info.
+    """
+    info_template = '{file_path:<80}\t{latitude:<9.6f}\t{longitude:<9.6f}'
+    if isinstance(result, Ok) and result.location is not None:
+        return info_template.format(
+            file_path=str(result.file_path),
+            latitude=result.location.latitude,
+            longitude=result.location.longitude,
+        )
+
+    return info_template.format(
+        file_path=str(result.file_path),
+        latitude=0,
+        longitude=0,
+    )
+
+
+def save_locations(
+    source: Path,
+    results: list[ProcessingResult],
+) -> Path:
+    """Save locations info.
+
+    Locations stored in `location.txt` file
+
+    Args:
+        source (Path): Root directory path.
+        results (list[ProcessingResult]): \
+            Results of images processing with pathes and location info.
 
     Returns:
         Path: Path to the saved location info.
     """
-    location_file_path = image_path.with_suffix('.json')
-    location_data = {
-        'latitude': location.latitude,
-        'longitude': location.longitude,
-    }
-    json.dump(location_data, location_file_path.open('w'))
-    return location_file_path
+    locations_info = '\n'.join(
+        get_image_location_info(result)
+        for result in results
+    )
+    locations_path = source / 'locations.txt'
+    locations_path.write_text(locations_info)
+    return locations_path
 
 
 def get_dir_images(source: Path) -> list[tuple[Path, bytes]]:
@@ -140,11 +169,9 @@ def process_dir(source: Path) -> None:
     processing_results, new_index = process_images(images, index)
     for result in processing_results:
         if isinstance(result, Ok):
-            if result.location is not None:
-                save_location(result.file_path, result.location)
-
             result.file_path.write_bytes(result.file_data)
 
+    save_locations(source, processing_results)
     save_files_index(source, new_index)
     log_result(processing_results)
 
