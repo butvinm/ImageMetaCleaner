@@ -5,7 +5,6 @@ import logging
 import sys
 from pathlib import Path
 from time import sleep
-from typing import Optional
 
 from image_meta_cleaner.files_index import FilesIndex
 from image_meta_cleaner.images import is_image
@@ -192,8 +191,12 @@ if __name__ == '__main__':
     match sys.argv:
         case _, source:
             process_dir(Path(source))
+            input('Press any key to exit...')
         case _, source, delay if delay.isdecimal():
             watch(Path(source), int(delay))
+            input('Press any key to exit...')
         case _:
             logging.error('Usage: imc source [delay]')
             sys.exit(1)
+
+    print('See logs at imc.log')
